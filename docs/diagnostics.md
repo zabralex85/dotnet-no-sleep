@@ -50,4 +50,5 @@ Record results here — they are the input for the phase 2 decision.
 
 | Date | Test | Enabled | Result after 35 min |
 |---|---|---|---|
-| | | | |
+| 2026-10-14 | Home PC, no policy; display off 5 min, sleep 5 min (Settings → Power) | NoSleep v0.1.0, Indefinite | Did not sleep (power request works) |
+| | Corporate PC | NoSleep v0.1.0, Indefinite + Keep screen on | |
