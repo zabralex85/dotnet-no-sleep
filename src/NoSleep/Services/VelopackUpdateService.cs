@@ -2,20 +2,20 @@ using System.Reflection;
 using Velopack;
 using Velopack.Sources;
 
-namespace NoSleep;
+namespace NoSleep.Services;
 
 /// <summary>
 /// GitHub Releases through Velopack. Inert when not installed by Velopack (dotnet run) or the build has no repository
 /// (<c>-p:UpdateRepository=</c>, set by the release workflow). Pre-releases are never offered.
 /// </summary>
-internal sealed class Updates
+internal sealed class VelopackUpdateService : IUpdateService
 {
 	private readonly UpdateManager? _manager;
 	private UpdateInfo? _pending;
 
-	public Updates()
+	public VelopackUpdateService()
 	{
-		var repository = typeof(Updates).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == "UpdateRepository")?.Value;
+		var repository = typeof(VelopackUpdateService).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == "UpdateRepository")?.Value;
 		if (!string.IsNullOrWhiteSpace(repository))
 		{
 			var manager = new UpdateManager(new GithubSource(repository, accessToken: null, prerelease: false));
@@ -23,11 +23,12 @@ internal sealed class Updates
 		}
 	}
 
-	public string CurrentVersion => _manager?.CurrentVersion?.ToString() ?? typeof(Updates).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
+	public string CurrentVersion =>
+		_manager?.CurrentVersion?.ToString() ?? typeof(VelopackUpdateService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
 
 	public string? PendingVersion => _pending?.TargetFullRelease.Version.ToString();
 
-	/// <summary>Returns false when offline or GitHub is blocked (corporate proxy): the next hourly check retries.</summary>
+	/// <summary>False when offline or GitHub is blocked (corporate proxy): the next hourly check retries.</summary>
 	public async Task<bool> CheckAsync()
 	{
 		if (_manager is null)
@@ -46,7 +47,6 @@ internal sealed class Updates
 		}
 	}
 
-	/// <summary>Downloads, then exits this process and restarts the new version.</summary>
 	public async Task ApplyAsync()
 	{
 		if (_manager is null || _pending is null)

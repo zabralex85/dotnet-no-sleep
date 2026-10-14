@@ -1,13 +1,18 @@
 using System.Windows;
 using System.Windows.Threading;
+using NoSleep.Services;
+using NoSleep.ViewModels;
+using NoSleep.Views;
 
 namespace NoSleep;
 
+/// <summary>Composition root: creates the services, view models and views, and drives the timers.</summary>
 internal sealed partial class App : Application
 {
-	private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(1) };
-	private AwakeController? _controller;
-	private Updates? _updates;
+	private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
+	private readonly DispatcherTimer _updateCheck = new() { Interval = TimeSpan.FromHours(1) };
+	private PowerRequest? _power;
+	private AwakeService? _awake;
 	private TrayIcon? _tray;
 	private SettingsWindow? _settingsWindow;
 
@@ -16,20 +21,24 @@ internal sealed partial class App : Application
 		base.OnStartup(e);
 		DispatcherUnhandledException += OnUnhandledException;
 
-		_controller = new AwakeController(Settings.DefaultPath);
-		_updates = new Updates();
-		_tray = new TrayIcon(_controller, _updates, ShowSettings, Shutdown);
+		_power = new PowerRequest("NoSleep: keep awake");
+		_awake = new AwakeService(_power, new JsonSettingsStore(JsonSettingsStore.DefaultPath), TimeProvider.System);
+		var trayVm = new TrayViewModel(_awake, new RegistryAutoStart(), new VelopackUpdateService());
+		_tray = new TrayIcon(trayVm, ShowSettings, Shutdown);
 
-		_updateTimer.Tick += async (_, _) => await _updates.CheckAsync();
-		_updateTimer.Start();
-		_ = _updates.CheckAsync();
+		_tick.Tick += (_, _) => _awake.Tick();
+		_tick.Start();
+		_updateCheck.Tick += async (_, _) => await trayVm.CheckForUpdatesSilentlyAsync();
+		_updateCheck.Start();
+		_ = trayVm.CheckForUpdatesSilentlyAsync();
 	}
 
 	protected override void OnExit(ExitEventArgs e)
 	{
-		_updateTimer.Stop();
+		_tick.Stop();
+		_updateCheck.Stop();
 		_tray?.Dispose();
-		_controller?.Dispose();
+		_power?.Dispose();
 		base.OnExit(e);
 	}
 
@@ -37,7 +46,7 @@ internal sealed partial class App : Application
 	{
 		if (_settingsWindow is null)
 		{
-			_settingsWindow = new SettingsWindow(_controller!);
+			_settingsWindow = new SettingsWindow(new SettingsViewModel(_awake!));
 			_settingsWindow.Closed += (_, _) => _settingsWindow = null;
 			_settingsWindow.Show();
 		}

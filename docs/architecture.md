@@ -3,36 +3,58 @@
 ## Stack
 
 - .NET 10 (`net10.0-windows`), WPF (`UseWPF`) + WinForms only for `NotifyIcon` (`UseWindowsForms`).
-- NuGet: `Velopack` (installer + updates) only. Plus StyleCop (from `Directory.Build.props`) and test packages.
+- NuGet: `Velopack` (installer + updates), `CommunityToolkit.Mvvm` (view models). Analyzers from `Directory.Build.props`: StyleCop, SonarAnalyzer.CSharp. Tests: xunit.v3, `Microsoft.Extensions.TimeProvider.Testing`.
 - Settings: `System.Text.Json` → `%APPDATA%\NoSleep\settings.json`.
 - Tests: xunit.v3 on Microsoft.Testing.Platform (see `global.json`), same packages as ai-chrome-proxy.
 
 ## Layout
 
+Light MVVM + SOLID: pure model, services behind interfaces (only where tests swap in fakes), view models with CommunityToolkit.Mvvm, thin views. `App` is the composition root — no DI container.
+
 ```
 NoSleep.slnx
+Directory.Build.props          StyleCop + SonarAnalyzer.CSharp for every project; SonarLint.xml = Sonar rule parameters
 .github/workflows/ci.yml       build + test on master / PR
 .github/workflows/release.yml  tag v* → Setup.exe on GitHub Releases (see release.md)
 src/NoSleep/
   NoSleep.csproj
-  app.manifest             asInvoker, Windows 10/11, PerMonitorV2 DPI
-  Program.cs               Main: VelopackApp.Build()...Run() first, then mutex, then App
-  App.xaml(.cs)            load settings, create tray; ShutdownMode=OnExplicitShutdown, no StartupUri
-  TrayIcon.cs              NotifyIcon + ContextMenuStrip, icon and tooltip per mode
-  AwakeController.cs       current mode, deadline, 1 s DispatcherTimer, applies KeepAwake
-  KeepAwake.cs             power request wrapper (Set/Clear), IDisposable
-  Native.cs                [LibraryImport] power request functions (kernel32)
-  Settings.cs              settings record + Load/Save
-  Startup.cs               HKCU Run: IsEnabled/Enable/Disable
-  Updates.cs               Velopack UpdateManager + GithubSource
-  SettingsWindow.xaml(.cs) settings window
-  Assets/                  app.ico, passive.ico, indefinite.ico, timed.ico, expirable.ico
-tests/NoSleep.Tests/       pure logic: mode transitions, deadlines, settings round-trip, Run-key command string
+  app.manifest                 asInvoker, Windows 10/11, PerMonitorV2 DPI
+  Program.cs                   Main: VelopackApp.Build()...Run() first, then mutex, then App
+  App.xaml(.cs)                composition root: builds services/view models/views, 1 s tick + hourly update check; ShutdownMode=OnExplicitShutdown
+  Models/
+    AwakeMode.cs               Passive / Indefinite / Timed / Expirable
+    AwakeSettings.cs           persisted record + pure transitions (WithTimed, Enabled, Expired, ...)
+  Services/
+    AwakeService.cs            owns current settings: applies power request, saves, expires deadlines (TimeProvider)
+    IPowerRequest.cs           → PowerRequest.cs (PowerCreateRequest/Set/Clear)
+    ISettingsStore.cs          → JsonSettingsStore.cs (%APPDATA%\NoSleep\settings.json)
+    IAutoStart.cs              → RegistryAutoStart.cs (HKCU Run)
+    IUpdateService.cs          → VelopackUpdateService.cs (GitHub Releases)
+    NativeMethods.cs           [LibraryImport] power request functions (kernel32)
+  ViewModels/
+    TrayViewModel.cs           tray state (mode, status text, presets, pending update) + commands
+    SettingsViewModel.cs       settings window fields, validation, commands
+    PresetRow.cs               presets grid row
+  Views/
+    TrayIcon.cs                renders TrayViewModel into a WinForms NotifyIcon/ContextMenuStrip
+    SettingsWindow.xaml(.cs)   bound to SettingsViewModel; code-behind only shows validation messages
+  Assets/                      app.ico, passive.ico, indefinite.ico, timed.ico, expirable.ico
+tests/NoSleep.Tests/
+  AwakeSettingsTests.cs        model transitions
+  Services/                    AwakeService (fakes + FakeTimeProvider), JsonSettingsStore, Run-key command
+  ViewModels/                  TrayViewModel, SettingsViewModel (commands, validation, messages)
+  Fakes/                       FakePowerRequest, MemorySettingsStore, FakeAutoStart, FakeUpdateService
 ```
 
-Icons were generated once with a System.Drawing script (coloured circle per mode: grey ring + z, green ∞, blue clock, orange clock + dot); `app.ico` = `indefinite.ico`. They are WPF `Resource`s loaded via `pack://application:,,,/Assets/<name>.ico`.
+Rules:
 
-Add files only when the existing ones get in the way. No interfaces/DI while there is a single implementation.
+- Dependencies point inward: Views → ViewModels → Services → Models. Models know nothing of Windows; view models nothing of WPF/WinForms types.
+- An interface exists only where a test needs a fake (Windows interop, file system, network). `AwakeService` and the view models are concrete.
+- Time comes from `TimeProvider` (tests use `FakeTimeProvider`), never `DateTimeOffset.Now` in services/view models.
+- View models talk to views through bindings, commands and events (`MessageRequested`, `ValidationFailed`); they never open windows or message boxes.
+- The WinForms tray menu can't bind, so `TrayIcon` rebuilds it from the view model on every open and calls its commands.
+
+Icons were generated once with a System.Drawing script (coloured circle per mode: grey ring + z, green ∞, blue clock, orange clock + dot); `app.ico` = `indefinite.ico`. They are WPF `Resource`s loaded via `pack://application:,,,/Assets/<name>.ico`.
 
 ## Keeping the PC awake
 
@@ -61,8 +83,8 @@ enum AwakeMode { Passive, Indefinite, Timed, Expirable }
 
 - Timed turns into an absolute deadline `now + interval` when started; Expirable already is a deadline. From there both are the same.
 - The deadline is saved in settings.json → after a restart: deadline passed → Passive, otherwise continue.
-- `DispatcherTimer` (1 s) on the UI thread: updates the tooltip countdown and checks the deadline. No locks.
-- Transitions are pure methods on the `Settings` record (`WithPassive`, `WithIndefinite`, `WithTimed`, `WithExpirable`, `Enabled`, `Expired`), each taking `now`; that is what tests cover. `AwakeController.Update(Func<Settings, DateTimeOffset, Settings>)` applies one, saves and re-applies the power request.
+- `App`'s `DispatcherTimer` (1 s) calls `AwakeService.Tick()` on the UI thread: checks the deadline and raises `Changed` for the tooltip countdown. No locks.
+- Transitions are pure methods on the `AwakeSettings` record (`WithPassive`, `WithIndefinite`, `WithTimed`, `WithExpirable`, `Enabled`, `Expired`), each taking `now`; that is what tests cover. `AwakeService.Update(Func<AwakeSettings, DateTimeOffset, AwakeSettings>)` applies one, saves and re-applies the power request.
 - Tray presets start Timed and remember the duration as `intervalHours`/`intervalMinutes`; "Enabled" then restarts that interval. Expirable resumes on "Enabled" only while `expirationDateTime` is ahead; otherwise Indefinite.
 - Clock changes / sleep: `now >= deadline` is checked every tick, so a mode expires correctly after resume.
 
@@ -107,7 +129,7 @@ static void Main()
 {
 	// Must run first: handles Velopack's --veloapp-* hook invocations and exits.
 	VelopackApp.Build()
-		.OnBeforeUninstallFastCallback(_ => Startup.Disable())
+		.OnBeforeUninstallFastCallback(_ => new RegistryAutoStart().Disable())
 		.Run();
 
 	using (var single = new Mutex(initiallyOwned: true, @"Local\NoSleep", out var isFirst))
@@ -128,7 +150,7 @@ static void Main()
 
 ## Updates
 
-See [release.md](release.md#updates). `Updates.cs` wraps `UpdateManager(new GithubSource(repo, accessToken: null, prerelease: false))`; does nothing when `!IsInstalled` (dotnet run) or the build has no repository URL.
+See [release.md](release.md#updates). `VelopackUpdateService` wraps `UpdateManager(new GithubSource(repo, accessToken: null, prerelease: false))`; does nothing when `!IsInstalled` (dotnet run) or the build has no repository URL.
 
 ## Simulate activity (phase 2)
 

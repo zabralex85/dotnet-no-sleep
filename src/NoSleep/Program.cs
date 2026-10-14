@@ -1,3 +1,4 @@
+using NoSleep.Services;
 using Velopack;
 
 namespace NoSleep;
@@ -9,7 +10,7 @@ internal static class Program
 	{
 		// Must run first: handles Velopack's --veloapp-* hook invocations and exits.
 		VelopackApp.Build()
-			.OnBeforeUninstallFastCallback(_ => Startup.Disable())
+			.OnBeforeUninstallFastCallback(_ => new RegistryAutoStart().Disable())
 			.Run();
 
 		// One tray per user session (Start with Windows plus a manual launch must not show two icons).

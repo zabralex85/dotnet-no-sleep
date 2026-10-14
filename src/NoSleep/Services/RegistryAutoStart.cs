@@ -1,18 +1,18 @@
 using Microsoft.Win32;
 
-namespace NoSleep;
+namespace NoSleep.Services;
 
 /// <summary>
-/// "Start with Windows": <c>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</c> value pointing at the running exe
+/// <c>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</c> value pointing at the running exe
 /// (Velopack's stable <c>current\NoSleep.exe</c>, so it survives updates). The registry is the source of truth.
 /// </summary>
-internal static class Startup
+internal sealed class RegistryAutoStart : IAutoStart
 {
 	private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 	private const string ValueName = "NoSleep";
 
 	/// <summary>On only when the value points at this exe (a moved exe shows off, and turning it on fixes the path).</summary>
-	public static bool IsEnabled
+	public bool IsEnabled
 	{
 		get
 		{
@@ -25,7 +25,7 @@ internal static class Startup
 
 	public static string Command(string exePath) => $"\"{exePath}\"";
 
-	public static void Enable()
+	public void Enable()
 	{
 		using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
 		{
@@ -33,7 +33,7 @@ internal static class Startup
 		}
 	}
 
-	public static void Disable()
+	public void Disable()
 	{
 		using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
 		{

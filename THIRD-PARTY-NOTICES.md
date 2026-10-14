@@ -10,6 +10,14 @@ The Windows release (`NoSleep-win-Setup.exe`, `NoSleep-win-Portable.zip`) bundle
 
 NoSleep installs per user and updates from GitHub Releases with it.
 
+## CommunityToolkit.Mvvm
+
+- File: `CommunityToolkit.Mvvm.dll` (next to `NoSleep.exe`).
+- CommunityToolkit.Mvvm 8.4.2 — Copyright © .NET Foundation and Contributors; License: MIT (https://licenses.nuget.org/MIT)
+- Source: https://github.com/CommunityToolkit/dotnet
+
+The tray and settings view models are built on it.
+
 ## .NET runtime
 
 - Files: the .NET 10 and Windows Desktop runtime files of the self-contained build.

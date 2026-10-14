@@ -1,21 +1,21 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-using static NoSleep.Native;
+using static NoSleep.Services.NativeMethods;
 
-namespace NoSleep;
+namespace NoSleep.Services;
 
 /// <summary>
-/// One power request (the mechanism Chromium/Teams uses), visible to admins in <c>powercfg /requests</c> with its reason.
+/// One Windows power request (the mechanism Chromium/Teams uses), visible to admins in <c>powercfg /requests</c> with its reason.
 /// Bound to the handle, not a thread; Windows drops it when the process exits.
 /// </summary>
-internal sealed class KeepAwake : IDisposable
+internal sealed class PowerRequest : IPowerRequest
 {
 	private readonly SafeFileHandle _request;
 	private bool _system;
 	private bool _display;
 
-	public KeepAwake(string reason)
+	public PowerRequest(string reason)
 	{
 		var text = Marshal.StringToHGlobalUni(reason);
 		try
@@ -34,7 +34,7 @@ internal sealed class KeepAwake : IDisposable
 		}
 	}
 
-	/// <summary>Sets or clears each request; requests are counted by Windows, so only changes are sent.</summary>
+	/// <summary>Sets or clears each request; Windows counts requests, so only changes are sent.</summary>
 	public void Apply(bool system, bool display)
 	{
 		Set(PowerRequestType.SystemRequired, ref _system, system);

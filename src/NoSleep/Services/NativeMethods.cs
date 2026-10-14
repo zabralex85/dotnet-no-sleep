@@ -1,9 +1,9 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-namespace NoSleep;
+namespace NoSleep.Services;
 
-internal static partial class Native
+internal static partial class NativeMethods
 {
 	public const uint PowerRequestContextVersion = 0;
 	public const uint PowerRequestContextSimpleString = 0x1;

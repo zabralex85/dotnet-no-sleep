@@ -5,7 +5,7 @@ NoSleep — Windows tray app (WPF, .NET 10) that keeps the PC awake like PowerTo
 ## Docs (read before changing behavior)
 
 - `docs/requirements.md` — problem, Awake feature parity, extensions, tray menu, phases, non-goals.
-- `docs/architecture.md` — project layout, power request API, modes/deadline logic, settings, autostart, startup, pitfalls.
+- `docs/architecture.md` — layout and layering rules (MVVM/SOLID), power request API, modes/deadline logic, settings, autostart, startup, pitfalls.
 - `docs/release.md` — Velopack installer, updates, tag → GitHub Release workflow, manual acceptance checklist.
 - `docs/diagnostics.md` — how to check corporate policy without admin; experiment log that decides whether phase 2 (simulate activity) is needed.
 
@@ -37,19 +37,24 @@ SDK pinned in `global.json` (10.0.x, rollForward latestFeature). Tests: xunit.v3
 - Settings in `%APPDATA%\NoSleep\settings.json` (not `%LOCALAPPDATA%\NoSleep` — Velopack's install root, wiped on uninstall). `System.Text.Json`, atomic write, corrupt file → defaults.
 - Update checks: no-op when not installed by Velopack or `UpdateRepository` metadata is empty; network failures are silent.
 - Simulate activity (phase 2) stays opt-in and off by default.
-- NuGet: only `Velopack`, StyleCop and test packages without a clear reason. Tray = WinForms `NotifyIcon`, no third-party tray lib. Keep `VPK_VERSION` in `release.yml` equal to the `Velopack` package version.
+- NuGet: `Velopack`, `CommunityToolkit.Mvvm`, analyzers (StyleCop, SonarAnalyzer.CSharp) and test packages; anything else needs a clear reason. Tray = WinForms `NotifyIcon`, no third-party tray lib. Keep `VPK_VERSION` in `release.yml` equal to the `Velopack` package version.
 - Workflows: tag/ref names go through `env`, never interpolated into scripts; `release.yml` has `contents: write`, `ci.yml` `contents: read`.
+
+## Structure
+
+- `Models/` pure (no Windows APIs), `Services/` Windows/file/network behind interfaces + `AwakeService`, `ViewModels/` CommunityToolkit.Mvvm (`[ObservableProperty]` fields, `[RelayCommand]`), `Views/` thin. Dependencies point inward; `App` is the composition root (no DI container).
+- Add an interface only where a test needs a fake. Time via `TimeProvider`. View models raise events for messages; they never show UI.
 
 ## Code style
 
-- StyleCop.Analyzers via `Directory.Build.props` + `StyleCop.ruleset`; build must be warning-free.
+- StyleCop.Analyzers + SonarAnalyzer.CSharp via `Directory.Build.props` (`StyleCop.ruleset`, `SonarLint.xml`); build must be warning-free.
 - `.editorconfig`: tabs (size 4), CRLF, UTF-8 without BOM.
 - No file headers (SA1633 off), no required XML docs (SA1600 off), `_camelCase` private fields, no `this.` (SA1101 off).
-- `[LibraryImport]` (source-generated P/Invoke), not `[DllImport]`. Native declarations live in `Native.cs`.
-- `UseWPF` + `UseWindowsForms`: implicit `System.Windows.Forms`/`System.Drawing` usings are removed in the csproj; import them per file (only `TrayIcon.cs`).
+- Use `[LibraryImport]` (source-generated P/Invoke), not `[DllImport]`. Native declarations live in `Services/NativeMethods.cs`.
+- `UseWPF` + `UseWindowsForms`: implicit `System.Windows.Forms`/`System.Drawing` usings are removed in the csproj; import them per file (only `Views/TrayIcon.cs`).
 - WPF implicit usings lack `System.IO` — add `using System.IO;`. XAML roots use `x:ClassModifier="internal"`. `using (...) { }` blocks, not `using var` (.editorconfig warning).
 - All UI and timer work on the WPF dispatcher thread (`DispatcherTimer`), no locks.
-- Tests only for pure logic (mode transitions on `Settings`, settings round-trip, Run-key command string). No UI tests, never write the real registry in tests.
+- Tests: models, `AwakeService` and view models with fakes from `tests/NoSleep.Tests/Fakes`; settings store against a temp folder. No UI tests, never write the real registry or `%APPDATA%` in tests.
 
 ## Third-party notices
 
