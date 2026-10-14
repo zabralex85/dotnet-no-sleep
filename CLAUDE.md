@@ -13,7 +13,7 @@ All docs are in English. Update them in the same change when behavior or layout 
 
 ## Status
 
-Docs only, no code yet. Next: phase 1 (MVP) per `docs/requirements.md`, including `.github/workflows/ci.yml` and `release.yml`.
+Phase 1 (MVP) implemented: tray, Awake modes, keep screen on, Enabled toggle, autostart, settings window, Velopack updates, CI + tag release. Next: run the `docs/diagnostics.md` experiment on the corporate PC; phase 2 only if it fails.
 
 ## Commands
 
@@ -25,7 +25,7 @@ dotnet run --project src/NoSleep
 
 Release: `git tag vX.Y.Z; git push origin vX.Y.Z` → `.github/workflows/release.yml` builds and uploads `NoSleep-win-Setup.exe`. Local packaging: `docs/release.md`.
 
-SDK pinned in `global.json` (10.0.x, rollForward latestFeature). Tests use Microsoft.Testing.Platform (MSTest).
+SDK pinned in `global.json` (10.0.x, rollForward latestFeature). Tests: xunit.v3 on Microsoft.Testing.Platform.
 
 ## Hard constraints
 
@@ -46,10 +46,11 @@ SDK pinned in `global.json` (10.0.x, rollForward latestFeature). Tests use Micro
 - `.editorconfig`: tabs (size 4), CRLF, UTF-8 without BOM.
 - No file headers (SA1633 off), no required XML docs (SA1600 off), `_camelCase` private fields, no `this.` (SA1101 off).
 - `[LibraryImport]` (source-generated P/Invoke), not `[DllImport]`. Native declarations live in `Native.cs`.
-- `UseWPF` + `UseWindowsForms`: `<Using Remove="System.Windows.Forms" />` in the csproj; WinForms types fully qualified or via alias.
+- `UseWPF` + `UseWindowsForms`: implicit `System.Windows.Forms`/`System.Drawing` usings are removed in the csproj; import them per file (only `TrayIcon.cs`).
+- WPF implicit usings lack `System.IO` — add `using System.IO;`. XAML roots use `x:ClassModifier="internal"`. `using (...) { }` blocks, not `using var` (.editorconfig warning).
 - All UI and timer work on the WPF dispatcher thread (`DispatcherTimer`), no locks.
-- Tests only for pure logic (deadline/mode computation, settings round-trip, Run-key command string). No UI tests, never write the real registry in tests.
+- Tests only for pure logic (mode transitions on `Settings`, settings round-trip, Run-key command string). No UI tests, never write the real registry in tests.
 
-## Repo housekeeping (inherited from ai-chrome-proxy)
+## Third-party notices
 
-`NOTICE`, `THIRD-PARTY-NOTICES.md`, `licenses/cloudflared-LICENSE.txt` and parts of `.gitignore` still reference AiChromeProxy — fix when touching them. If code is ever copied from PowerToys (MIT), add it to `THIRD-PARTY-NOTICES.md`.
+`THIRD-PARTY-NOTICES.md` lists what the package bundles (Velopack, .NET runtime) and ships next to the exe. Adding a NuGet dependency or copying code (e.g. from PowerToys, MIT) → add it there.

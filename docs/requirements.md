@@ -68,13 +68,13 @@ Check for updates
 Exit
 ```
 
-Double-click on the icon = toggle Enabled.
+Double-click on the icon = toggle Enabled. `Custom…` and `Until date/time…` open the settings window.
 
 ## Settings window (WPF)
 
 - Interval for Timed: hours + minutes.
 - Date/time for Expirable (`DatePicker` + time field).
-- `customTrayTimes` list: add/remove (name, duration).
+- `customTrayTimes` list: add/remove (name, minutes in the grid; stored as seconds).
 - Simulate activity: on/off, interval in seconds (phase 2).
 
 ## Phases

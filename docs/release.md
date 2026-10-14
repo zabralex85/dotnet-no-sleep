@@ -46,7 +46,9 @@ Tag format: `vMAJOR.MINOR.PATCH[-suffix]`. Anything else fails the workflow. A `
 5. `vpk pack --packId NoSleep --packVersion $VERSION --runtime win-x64 --packDir publish --mainExe NoSleep.exe --packTitle "NoSleep" --packAuthors "Alexander Zabrodskiy" --icon src/NoSleep/Assets/app.ico --outputDir releases`.
 6. `vpk upload github --repoUrl <repo url> --token $GITHUB_TOKEN --publish --releaseName "NoSleep $TAG" --tag $TAG --outputDir releases [--pre]`.
 
-`.github/workflows/ci.yml` (push to master, PRs, `contents: read`): restore → build `-p:Version=0.0.0-ci` → test.
+`.github/workflows/ci.yml` (push to master, PRs, `contents: read`): restore → build `-p:Version=0.0.0-ci` → test. No coverage gate (little logic; add one if it grows).
+
+`THIRD-PARTY-NOTICES.md` is copied next to `NoSleep.exe` by the csproj (`CopyToPublishDirectory`), so it ships in every package.
 
 The repository URL reaches the app as `<AssemblyMetadata Include="UpdateRepository" Value="$(UpdateRepository)" />` in the csproj; unset = no update checks.
 

@@ -1,0 +1,57 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+# Creating the GitHub Release needs write access; ci.yml stays read-only.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      # Keep in step with the Velopack package version in src/NoSleep/NoSleep.csproj.
+      VPK_VERSION: 1.2.161
+      # Passed through the environment, never interpolated into a script: a tag name is attacker-chosen text.
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Version from tag (v1.2.3 -> 1.2.3)
+        shell: pwsh
+        run: |
+          if ($env:TAG -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?\z') { throw "Tag '$env:TAG' is not vMAJOR.MINOR.PATCH[-suffix]." }
+          "VERSION=$($env:TAG.Substring(1))" >> $env:GITHUB_ENV
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (StyleCop errors fail the build)
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test --project tests/NoSleep.Tests -c Release --no-build
+
+      - name: Publish (self-contained, win-x64)
+        run: dotnet publish src/NoSleep -c Release -r win-x64 --self-contained -p:Version=$env:VERSION -p:UpdateRepository=$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY -o publish
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version $env:VPK_VERSION
+
+      - name: Pack (Setup.exe + update packages)
+        run: vpk pack --packId NoSleep --packVersion $env:VERSION --runtime win-x64 --packDir publish --mainExe NoSleep.exe --packTitle "NoSleep" --packAuthors "Alexander Zabrodskiy" --icon src/NoSleep/Assets/app.ico --outputDir releases
+
+      # A -suffix tag (v0.2.0-rc1) becomes a GitHub pre-release, which installed apps (stable channel) never offer.
+      - name: Upload GitHub Release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $pre = @(if ($env:VERSION.Contains('-')) { '--pre' })
+          vpk upload github --repoUrl "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY" --token $env:GITHUB_TOKEN --publish --releaseName "NoSleep $env:TAG" --tag $env:TAG --outputDir releases @pre
